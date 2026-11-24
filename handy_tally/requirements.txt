@@ -1,0 +1,8 @@
+aiohttp>=3.9
+websockets>=12
+PyYAML>=6
+# MIDI (nur wenn midi.enabled):
+mido>=1.3
+python-rtmidi>=1.5
+# optional: QR-Code im Terminal
+qrcode>=7

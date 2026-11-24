@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Handy-Tally</title>
+<style>
+  :root { --idle:#1b1b1b; --prog:#e00000; --prev:#00b030; --fg:#fff; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:#000; color:var(--fg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; overflow:hidden; }
+  #tally { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; background:var(--idle); transition:background .08s; user-select:none; }
+  #tally.program { background:var(--prog); }
+  #tally.preview { background:var(--prev); }
+  #tally.offline { background:#000; outline:8px dashed #555; outline-offset:-16px; }
+  #name { font-size:min(16vw,15vh); font-weight:800; text-align:center; padding:0 4vw; line-height:1.05; }
+  #label { font-size:min(8vw,7vh); font-weight:700; letter-spacing:.15em; margin-top:2vh; opacity:.9; }
+  #by { font-size:3.5vw; margin-top:1.5vh; opacity:.6; }
+  #top { position:fixed; top:env(safe-area-inset-top,0); left:0; right:0; display:flex; gap:8px;
+    padding:10px 12px; font-size:13px; align-items:center; z-index:2; }
+  .pill { padding:3px 8px; border-radius:99px; background:rgba(0,0,0,.45); white-space:nowrap; }
+  .pill.on { background:#fff; color:#c00; font-weight:800; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#777; margin-right:5px; }
+  .dot.ok { background:#3d3; } .dot.bad { background:#f44; }
+  #menuBtn { margin-left:auto; font-size:20px; background:rgba(0,0,0,.45); border:0; color:#fff;
+    border-radius:8px; padding:2px 10px; }
+  #picker { position:fixed; inset:0; background:#111; z-index:5; overflow:auto; padding:24px 16px; display:none; }
+  #picker h1 { font-size:22px; margin:0 0 16px; }
+  #picker button.t { display:block; width:100%; font-size:22px; padding:18px; margin-bottom:10px;
+    border-radius:12px; border:0; background:#2a2a2a; color:#fff; text-align:left; }
+  #picker .row { display:flex; gap:10px; margin:14px 0; flex-wrap:wrap; }
+  #picker .opt { font-size:15px; padding:10px 14px; border-radius:10px; border:1px solid #444; background:#1c1c1c; color:#ddd; }
+  #picker .hint { font-size:13px; color:#888; line-height:1.4; }
+  #grid { position:fixed; inset:0; display:none; padding:48px 8px 8px; gap:8px;
+    grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); grid-auto-rows:minmax(110px,1fr); background:#000; }
+  #grid div { border-radius:12px; display:flex; align-items:center; justify-content:center; text-align:center;
+    font-size:22px; font-weight:700; background:var(--idle); padding:6px; }
+  #grid .program { background:var(--prog); } #grid .preview { background:var(--prev); }
+</style>
+</head>
+<body>
+<div id="tally" class="offline"><div id="name">…</div><div id="label">VERBINDE</div><div id="by"></div></div>
+<div id="grid"></div>
+<div id="top"><span id="air"></span><span id="srcs"></span><button id="menuBtn" aria-label="Menü">☰</button></div>
+<div id="picker">
+  <h1>Welcher Tally bin ich?</h1>
+  <div id="list"></div>
+  <button class="t" data-id="*">▦ Übersicht (alle)</button>
+  <div class="row">
+    <button class="opt" id="fsBtn">Vollbild</button>
+    <button class="opt" id="vibBtn">Vibration: an</button>
+    <button class="opt" id="prevBtn">Vorschau (grün): an</button>
+  </div>
+  <p class="hint">Tipp: Display-Sperre am Handy deaktivieren bzw. Seite zum Homescreen hinzufügen.
+    Tippe auf den Bildschirm für Vollbild. Direktlink pro Tally: <code>?t=ID</code></p>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const params = new URLSearchParams(location.search);
+const store = { get:(k,d)=>{ try{ return localStorage.getItem(k) ?? d }catch{ return d } },
+                set:(k,v)=>{ try{ localStorage.setItem(k,v) }catch{} } };
+let mine = params.get("t") || store.get("tally", null);
+let vibrate = store.get("vib","1") === "1";
+let showPreview = store.get("prev","1") === "1";
+let last = null, lastState = null, ws = null, alive = 0;
+
+const LABEL = { program:"LIVE", preview:"PREVIEW", idle:"" };
+
+function render() {
+  const t = $("#tally"), grid = $("#grid");
+  if (!last) return;
+  const online = ws && ws.readyState === 1;
+  // Kopfzeile
+  const g = last.globals || {};
+  $("#air").innerHTML = (g.streaming ? '<span class="pill on">ON AIR</span> ' : "") +
+                        (g.recording ? '<span class="pill on">REC</span>' : "");
+  $("#srcs").innerHTML = Object.entries(last.sources || {}).map(([n,s]) =>
+    `<span class="pill" title="${s.info||""}"><span class="dot ${s.connected?"ok":"bad"}"></span>${n}</span>`).join(" ");
+
+  if (mine === "*") {
+    t.style.display = "none"; grid.style.display = "grid";
+    grid.innerHTML = last.tallies.map(x => `<div class="${x.state}">${x.name}</div>`).join("");
+    return;
+  }
+  t.style.display = "flex"; grid.style.display = "none";
+  const me = last.tallies.find(x => x.id === mine);
+  if (!me) { openPicker(); return; }
+  let st = me.state;
+  if (st === "preview" && !showPreview) st = "idle";
+  t.className = online ? st : "offline";
+  $("#name").textContent = me.name;
+  $("#label").textContent = online ? LABEL[st] : "OFFLINE";
+  $("#by").textContent = online ? [...me.program_by, ...(st==="preview"?me.preview_by:[])].join(" · ") : "";
+  if (online && st === "program" && lastState !== "program" && vibrate && navigator.vibrate) navigator.vibrate([200,80,200]);
+  lastState = online ? st : null;
+  document.title = (st === "program" ? "🔴 " : st === "preview" ? "🟢 " : "") + me.name;
+}
+
+function openPicker() {
+  $("#picker").style.display = "block";
+  $("#list").innerHTML = (last ? last.tallies : []).map(x =>
+    `<button class="t" data-id="${x.id}">${x.name}</button>`).join("");
+}
+$("#picker").addEventListener("click", e => {
+  const b = e.target.closest("button.t"); if (!b) return;
+  mine = b.dataset.id; store.set("tally", mine);
+  history.replaceState(null, "", "?t=" + encodeURIComponent(mine));
+  $("#picker").style.display = "none"; lastState = null; render(); goFullscreen();
+});
+$("#menuBtn").onclick = e => { e.stopPropagation(); openPicker(); };
+$("#fsBtn").onclick = goFullscreen;
+$("#vibBtn").onclick = () => { vibrate = !vibrate; store.set("vib", vibrate?"1":"0"); updOpts(); };
+$("#prevBtn").onclick = () => { showPreview = !showPreview; store.set("prev", showPreview?"1":"0"); updOpts(); render(); };
+function updOpts(){ $("#vibBtn").textContent = "Vibration: " + (vibrate?"an":"aus");
+                    $("#prevBtn").textContent = "Vorschau (grün): " + (showPreview?"an":"aus"); }
+updOpts();
+$("#tally").onclick = goFullscreen;
+
+function goFullscreen() {
+  const el = document.documentElement;
+  if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+  keepAwake();
+}
+
+// Bildschirm wach halten: Wake Lock API (Chrome/Safari; braucht teils HTTPS – sonst Display-Timeout am Handy hochsetzen)
+let wakeLock = null;
+async function keepAwake() {
+  try { if ("wakeLock" in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => wakeLock = null); } } catch {}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { wakeLock = null; keepAwake(); } });
+
+function connect() {
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onmessage = e => { alive = Date.now(); const m = JSON.parse(e.data);
+    if (m.type === "state") { last = m; if (!mine) openPicker(); render(); } };
+  ws.onopen = () => { alive = Date.now(); render(); };
+  ws.onclose = () => { render(); setTimeout(connect, 1000); };
+  ws.onerror = () => ws.close();
+}
+// Watchdog: hängende Verbindung erkennen (z.B. WLAN-Wechsel)
+setInterval(() => { if (ws && ws.readyState === 1) { ws.send("ping");
+  if (Date.now() - alive > 8000) ws.close(); } }, 3000);
+connect();
+</script>
+</body>
+</html>

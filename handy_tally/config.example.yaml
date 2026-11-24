@@ -1,0 +1,58 @@
+# Handy-Tally Konfiguration – nach config.yaml kopieren und anpassen.
+
+server:
+  host: 0.0.0.0     # auf allen Netzwerkkarten lauschen
+  port: 8080
+
+# --- OBS Studio (Werkzeuge → WebSocket-Server-Einstellungen) -----------------
+obs:
+  enabled: true
+  host: localhost
+  port: 4455
+  password: ""      # Passwort aus OBS ("Verbindungsinfo anzeigen")
+
+# --- Radio-/DAW-Controller per MIDI ------------------------------------------
+midi:
+  enabled: false
+  ports: []         # leer = alle Eingänge; sonst Teilstrings, z.B. ["X-Touch", "loopMIDI"]
+
+# --- Yamaha DM3 (RCP über Netzwerk, TCP 49280) -------------------------------
+dm3:
+  enabled: false
+  host: 192.168.0.128
+  port: 49280
+  poll_interval: 1.0
+
+# --- Die Tallys (= je ein Handy) ---------------------------------------------
+# Ein Tally ist LIVE (rot), sobald IRGENDEINE Quelle ihn live meldet.
+# PREVIEW (grün) kommt nur von OBS im Studio-Modus.
+tallies:
+  - id: cam1
+    name: Kamera 1
+    obs:
+      sources: ["Kamera 1"]        # OBS-Quellenname (auch in verschachtelten Szenen/Gruppen)
+
+  - id: cam2
+    name: Kamera 2
+    obs:
+      sources: ["Kamera 2"]
+
+  - id: mod
+    name: Moderation
+    # live, wenn ...
+    obs:
+      audio: ["Mikro Moderation"]  # ... der OBS-Audioeingang nicht stumm ist, ODER
+    dm3:
+      channel: 1                   # ... DM3-Kanal 1 ON ist und Fader > -60 dB, ODER
+      min_db: -60
+    midi:                          # ... Mackie-Fader 1 offen UND Mute-LED aus
+      - {type: pitchbend, channel: 1, threshold: 3}
+      - {type: note, channel: 1, number: 16, mode: gate, invert: true}
+
+  - id: gast
+    name: Gast
+    dm3:
+      channel: 2
+      to_stereo: true              # zusätzlich muss der Kanal auf die Summe geroutet sein
+    midi:
+      - {type: cc, channel: 1, number: 2, threshold: 5}   # einfacher Fader auf CC 2
