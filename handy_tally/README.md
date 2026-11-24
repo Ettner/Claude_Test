@@ -26,6 +26,8 @@ Unter Windows: `copy config.example.yaml config.yaml`. Wer kein MIDI braucht, ka
 `mido`/`python-rtmidi` weglassen.
 
 ## Start
+Gibt es noch keine `config.yaml`, wird sie beim ersten Start automatisch angelegt.
+Danach lässt sich alles im Admin-Client einstellen (siehe unten).
 
 ```bash
 python tally.py            # normal
@@ -48,6 +50,25 @@ installiert ist, kommt ein QR-Code dazu. Am Handy öffnen, Tally auswählen, fer
 > (privates Netzwerk), sonst erreichen die Handys den Server nicht.
 > Display-Timeout am Handy hochsetzen. Die Seite versucht zwar die Wake-Lock-API, die
 > funktioniert über HTTP aber nicht auf jedem Gerät.
+
+## 🎛️ Admin-Client (Konfiguration & Steuerung)
+
+Am Regie-Rechner im Browser **`http://localhost:8080/admin`** öffnen. Von einem anderen Gerät
+geht `http://IP:8080/admin`. Alles lässt sich dort einstellen, `config.yaml` muss man nicht von Hand bearbeiten.
+
+| Reiter | Funktion |
+|---|---|
+| **Steuerung** | Live-Ansicht aller Tallys. Jeden Tally manuell auf **LIVE**/**PREVIEW** schalten oder mit **Auto** zurück auf die Quellen. Demo-Modus an/aus. Status der Quellen. **Liste der verbundenen Handys**: jedem Handy aus der Ferne einen Tally zuweisen, Handy **identifizieren** (blinkt und zeigt seine Nummer), alle Handys neu laden. |
+| **Tallys** | Tallys anlegen, umbenennen, sortieren, löschen. Pro Tally die OBS-Quellen, -Szenen und -Audio-Eingänge (mit Vorschlägen direkt aus OBS), den DM3-Kanal und die MIDI-Regeln einstellen. |
+| **Quellen** | OBS, MIDI und DM3 aktivieren, IP/Port/Passwort eintragen, gefundene MIDI-Ports ansehen. Admin-Passwort setzen. |
+| **MIDI-Monitor** | Zeigt eingehende MIDI-Nachrichten live an. Ziel-Tally wählen, dann **„→ Tally“** klicken: Die Nachricht wird als Regel übernommen (Anlernen). |
+
+**Speichern & übernehmen** schreibt `config.yaml` (die vorherige Version bleibt als
+`config.yaml.bak` erhalten) und verbindet die Quellen neu. Die Handys bleiben dabei verbunden,
+ein Neustart ist nicht nötig. Nur eine Änderung des Server-Ports braucht einen Neustart.
+Kommentare in der `config.yaml` gehen beim Speichern aus dem Admin-Client verloren.
+
+Mit `server.admin_password` ist der Admin-Client per Passwort geschützt. Die Handy-Seite bleibt offen.
 
 ## Einrichtung der Quellen
 
@@ -109,6 +130,7 @@ sources/obs.py        obs-websocket v5 Client
 sources/midi.py       MIDI via mido/python-rtmidi
 sources/yamaha_dm3.py Yamaha RCP (TCP 49280)
 static/index.html     Handy-Oberfläche
+static/admin.html     Admin-Client (Konfiguration & Steuerung)
 ```
 
 Eine neue Quelle (z. B. vMix, ATEM) braucht nur eine Klasse mit `async def run()`, die

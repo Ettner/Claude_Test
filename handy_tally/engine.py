@@ -14,11 +14,6 @@ from typing import Any, Callable, Iterable
 class TallyEngine:
     def __init__(self, tallies: Iterable[dict]):
         self.tallies: dict[str, dict] = {}
-        for t in tallies:
-            if "id" not in t:
-                raise ValueError(f"Tally ohne 'id': {t}")
-            t.setdefault("name", t["id"])
-            self.tallies[t["id"]] = t
         # flags[source][tally_id] = {"program": bool, "preview": bool}
         self.flags: dict[str, dict[str, dict[str, bool]]] = {}
         # status[source] = {"connected": bool, "info": str, ...}
@@ -27,6 +22,32 @@ class TallyEngine:
         self.globals: dict[str, Any] = {}
         self._listeners: set[Callable[[dict], Any]] = set()
         self._dirty = asyncio.Event()
+        self.set_tallies(tallies)
+
+    def set_tallies(self, tallies: Iterable[dict]) -> None:
+        """Tally-Liste (neu) setzen – z.B. nach Änderung im Admin-Client."""
+        new: dict[str, dict] = {}
+        for t in tallies:
+            if not t.get("id"):
+                raise ValueError(f"Tally ohne 'id': {t}")
+            if t["id"] in new:
+                raise ValueError(f"Tally-ID doppelt: {t['id']}")
+            t.setdefault("name", t["id"])
+            new[t["id"]] = t
+        self.tallies = new
+        for flags in self.flags.values():
+            for tid in list(flags):
+                if tid not in new:
+                    del flags[tid]
+        self._dirty.set()
+
+    def remove_source(self, source: str) -> None:
+        self.flags.pop(source, None)
+        self.status.pop(source, None)
+        self._dirty.set()
+
+    def notify(self) -> None:
+        self._dirty.set()
 
     # ---------- API für Quellen ----------
     def update(self, source: str, per_tally: dict[str, tuple[bool, bool]]) -> None:

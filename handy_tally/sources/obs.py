@@ -61,11 +61,14 @@ class OBSSource:
                     reader = asyncio.create_task(self._reader(ws))
                     refresher = asyncio.create_task(self._refresher())
                     self._refresh.set()
-                    done, pending = await asyncio.wait({reader, refresher}, return_when=asyncio.FIRST_COMPLETED)
-                    for t in pending:
-                        t.cancel()
-                    for t in done:
-                        t.result()
+                    try:
+                        done, _ = await asyncio.wait({reader, refresher}, return_when=asyncio.FIRST_COMPLETED)
+                        for t in done:
+                            t.result()
+                    finally:
+                        for t in (reader, refresher):
+                            t.cancel()
+                        await asyncio.gather(reader, refresher, return_exceptions=True)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -104,6 +107,14 @@ class OBSSource:
                 if fut and not fut.done():
                     fut.set_result(d)
         raise ConnectionError("OBS hat die Verbindung geschlossen")
+
+    async def discover(self) -> dict:
+        """Szenen- und Quellennamen für den Admin-Client."""
+        if not self._ws:
+            return {}
+        scenes = [s["sceneName"] for s in (await self._request("GetSceneList")).get("scenes", [])][::-1]
+        inputs = (await self._request("GetInputList")).get("inputs", [])
+        return {"scenes": scenes, "inputs": sorted(i["inputName"] for i in inputs)}
 
     async def _request(self, rtype: str, **data) -> dict:
         rid = str(next(self._ids))

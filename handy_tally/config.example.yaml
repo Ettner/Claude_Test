@@ -3,6 +3,7 @@
 server:
   host: 0.0.0.0     # auf allen Netzwerkkarten lauschen
   port: 8080
+  admin_password: ""   # schützt /admin (leer = kein Passwort)
 
 # --- OBS Studio (Werkzeuge → WebSocket-Server-Einstellungen) -----------------
 obs:

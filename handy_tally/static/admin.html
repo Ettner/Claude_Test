@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tally-Admin</title>
+<style>
+  :root { --bg:#121417; --panel:#1b1e23; --panel2:#23272e; --line:#323843; --fg:#e8eaed; --mute:#9aa3ae;
+    --accent:#3d8bfd; --prog:#e00000; --prev:#00a82d; --warn:#f0a020; --bad:#ff5050; --ok:#36c96b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    padding:10px 16px; background:#0d0f12; border-bottom:1px solid var(--line); }
+  header h1 { font-size:17px; margin:0 8px 0 0; }
+  nav { display:flex; gap:4px; flex-wrap:wrap; }
+  nav button { background:none; border:0; color:var(--mute); padding:7px 12px; border-radius:8px; font-size:14px; cursor:pointer; }
+  nav button.active { background:var(--panel2); color:var(--fg); }
+  #saveBar { margin-left:auto; display:flex; align-items:center; gap:10px; }
+  #dirty { color:var(--warn); font-size:13px; display:none; }
+  main { max-width:1200px; margin:0 auto; padding:16px; }
+  section { display:none; } section.active { display:block; }
+  h2 { font-size:15px; margin:22px 0 10px; color:var(--mute); text-transform:uppercase; letter-spacing:.06em; }
+  h2:first-child { margin-top:4px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
+  button.btn { background:var(--panel2); color:var(--fg); border:1px solid var(--line); border-radius:8px;
+    padding:6px 12px; font-size:13px; cursor:pointer; white-space:nowrap; }
+  button.btn:hover { border-color:#4a5260; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  button.danger { color:var(--bad); }
+  button.on-prog { background:var(--prog); border-color:var(--prog); color:#fff; }
+  button.on-prev { background:var(--prev); border-color:var(--prev); color:#fff; }
+  input, select { background:#0f1114; color:var(--fg); border:1px solid var(--line); border-radius:7px; padding:6px 8px; font-size:13px; }
+  input[type=checkbox] { width:16px; height:16px; vertical-align:middle; }
+  input:focus, select:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  label.f { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--mute); }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .muted { color:var(--mute); } .small { font-size:12px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  th { color:var(--mute); font-weight:500; font-size:12px; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; }
+  .tile { border-radius:12px; padding:12px; background:var(--panel2); border:1px solid var(--line); display:flex; flex-direction:column; gap:8px; }
+  .tile.program { background:var(--prog); border-color:var(--prog); }
+  .tile.preview { background:var(--prev); border-color:var(--prev); }
+  .tile .nm { font-size:18px; font-weight:700; }
+  .tile .by { font-size:12px; opacity:.85; min-height:16px; }
+  .tile .btns { display:flex; gap:6px; }
+  .tile .btns button { flex:1; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; background:#666; }
+  .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); }
+  .src { display:flex; align-items:baseline; gap:6px; padding:4px 0; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .chip { background:#0f1114; border:1px solid var(--line); border-radius:99px; padding:3px 4px 3px 10px; font-size:12px; display:flex; align-items:center; gap:4px; }
+  .chip button { background:none; border:0; color:var(--mute); cursor:pointer; font-size:14px; line-height:1; padding:0 4px; }
+  .tcard { border-left:4px solid var(--line); }
+  .tcard.program { border-left-color:var(--prog); } .tcard.preview { border-left-color:var(--prev); }
+  .tcard .hdr { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-bottom:12px; }
+  .grid3 { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
+  .tcard .grid3 { grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr)); }
+  .tcard .grid3 .box:last-child { grid-column:span 1; min-width:min(100%,370px); }
+  .box { background:var(--panel2); border-radius:10px; padding:10px; }
+  .box h3 { margin:0 0 8px; font-size:13px; }
+  .box { min-width:0; overflow-x:auto; }
+  .box table th, .box table td { padding:3px 3px; }
+  .box table select, .box table input { padding:4px 4px; }
+  .log { font:12px ui-monospace,Menlo,Consolas,monospace; max-height:440px; overflow:auto; }
+  .log tr:first-child td { background:rgba(61,139,253,.12); }
+  #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#000; border:1px solid var(--line);
+    padding:10px 16px; border-radius:10px; display:none; z-index:20; max-width:90vw; }
+  #toast.err { border-color:var(--bad); color:#ffb0b0; }
+  .air { font-weight:800; padding:2px 8px; border-radius:6px; background:#fff; color:#c00; font-size:12px; }
+  @media (max-width:640px) { #saveBar { margin-left:0; width:100%; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>📱 Tally-Admin</h1>
+  <nav id="nav">
+    <button data-tab="control" class="active">Steuerung</button>
+    <button data-tab="tallies">Tallys</button>
+    <button data-tab="sources">Quellen</button>
+    <button data-tab="midi">MIDI-Monitor</button>
+  </nav>
+  <span id="air"></span>
+  <div id="saveBar">
+    <span id="dirty">● ungespeicherte Änderungen</span>
+    <button class="btn" id="revertBtn">Verwerfen</button>
+    <button class="btn primary" id="saveBtn">Speichern &amp; übernehmen</button>
+  </div>
+</header>
+
+<main>
+  <!-- ================= Steuerung ================= -->
+  <section id="control" class="active">
+    <h2>Tallys live</h2>
+    <div class="tiles" id="tiles"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="allOff">Alle manuellen Schaltungen aus</button>
+      <label class="small muted"><input type="checkbox" id="demoChk"> Demo-Modus (Tallys wechseln reihum)</label>
+    </div>
+
+    <h2>Quellen</h2>
+    <div class="panel" id="srcStatus"></div>
+
+    <h2>Verbundene Handys <span class="muted small" id="clientCount"></span></h2>
+    <div class="panel">
+      <table>
+        <thead><tr><th>#</th><th>IP</th><th>zeigt Tally</th><th>Gerät</th><th></th></tr></thead>
+        <tbody id="clients"></tbody>
+      </table>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" data-cmd="identify">Alle identifizieren</button>
+        <button class="btn" data-cmd="reload">Alle neu laden</button>
+        <span class="small muted">„Identifizieren“ lässt das Handy blinken und zeigt seine Nummer.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Tallys ================= -->
+  <section id="tallies">
+    <div class="row" style="justify-content:space-between; margin-bottom:10px">
+      <span class="muted small">Ein Tally wird LIVE, sobald irgendeine Quelle ihn live meldet. MIDI: alle Regeln müssen gleichzeitig erfüllt sein.</span>
+      <div class="row">
+        <button class="btn" id="refreshDisc">OBS/MIDI-Namen neu laden</button>
+        <button class="btn primary" id="addTally">+ Tally</button>
+      </div>
+    </div>
+    <div id="tallyList"></div>
+  </section>
+
+  <!-- ================= Quellen ================= -->
+  <section id="sources">
+    <div class="grid3">
+      <div class="panel">
+        <h2>OBS Studio</h2>
+        <p class="small muted">In OBS: Werkzeuge → WebSocket-Server-Einstellungen → aktivieren.</p>
+        <div class="row">
+          <label class="small"><input type="checkbox" data-bind="obs.enabled"> aktiv</label>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label class="f">Host <input data-bind="obs.host" placeholder="localhost"></label>
+          <label class="f">Port <input data-bind="obs.port" type="number" style="width:90px"></label>
+          <label class="f">Passwort <input data-bind="obs.password" type="password" autocomplete="off"></label>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>MIDI (Radio/DAW-Controller)</h2>
+        <p class="small muted">Leer = alle Eingänge. Tipp: Mackie-Feedback der DAW über loopMIDI/IAC einspeisen.</p>
+        <label class="small"><input type="checkbox" data-bind="midi.enabled"> aktiv</label>
+        <div style="margin-top:8px">
+          <div class="small muted">Ports (Teilstring des Namens)</div>
+          <div class="chips" id="midiPorts"></div>
+          <div class="small muted" style="margin-top:8px">Gefunden: <span id="midiAvail">–</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Yamaha DM3</h2>
+        <p class="small muted">Yamaha Remote Control Protocol, TCP-Port 49280. Pult-IP unter Setup → Network.</p>
+        <label class="small"><input type="checkbox" data-bind="dm3.enabled"> aktiv</label>
+        <div class="row" style="margin-top:8px">
+          <label class="f">IP-Adresse <input data-bind="dm3.host" placeholder="192.168.0.128"></label>
+          <label class="f">Port <input data-bind="dm3.port" type="number" style="width:90px"></label>
+          <label class="f">Abfrage (s) <input data-bind="dm3.poll_interval" type="number" step="0.1" style="width:80px"></label>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Server</h2>
+        <div class="row">
+          <label class="f">Port <input data-bind="server.port" type="number" style="width:90px"></label>
+          <label class="f">Admin-Passwort <input data-bind="server.admin_password" type="password" autocomplete="new-password" placeholder="(keins)"></label>
+        </div>
+        <p class="small muted">Port-Änderungen greifen erst nach Neustart des Programms. Mit Admin-Passwort ist diese Seite geschützt (die Handy-Seite bleibt offen).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= MIDI-Monitor ================= -->
+  <section id="midi">
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <span class="small muted">Fader/Tasten am Controller bewegen. Mit „→ Tally“ wird die Nachricht als Regel übernommen
+          (danach speichern). MIDI muss unter „Quellen“ aktiv sein.</span>
+        <div class="row">
+          <select id="midiTarget"></select>
+          <button class="btn" id="clearLog">Leeren</button>
+        </div>
+      </div>
+      <table class="log" style="margin-top:10px">
+        <thead><tr><th>Zeit</th><th>Port</th><th>Nachricht</th><th></th></tr></thead>
+        <tbody id="midiLog"><tr><td colspan="4" class="muted">noch keine Nachrichten</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<datalist id="dl-inputs"></datalist>
+<datalist id="dl-scenes"></datalist>
+<datalist id="dl-all"></datalist>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const store = { get:(k,d)=>{ try{ return localStorage.getItem(k) ?? d }catch{ return d } },
+                set:(k,v)=>{ try{ localStorage.setItem(k,v) }catch{} } };
+
+let cfg = null, savedJson = "", status = null, midiSince = 0, midiRows = [];
+
+// ---------- API ----------
+async function api(method, url, body) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const r = await fetch(url, { method, headers: { "Content-Type":"application/json", "X-Admin-Key": store.get("adminKey","") },
+                                 body: body === undefined ? undefined : JSON.stringify(body) });
+    if (r.status === 401) {
+      const pw = prompt("Admin-Passwort:");
+      if (pw === null) throw new Error("kein Zugriff");
+      store.set("adminKey", pw); continue;
+    }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    return data;
+  }
+  throw new Error("Admin-Passwort falsch");
+}
+function toast(msg, err) {
+  const t = $("#toast"); t.textContent = msg; t.className = err ? "err" : ""; t.style.display = "block";
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = "none", err ? 6000 : 2500);
+}
+
+// ---------- Tabs ----------
+$("#nav").onclick = e => {
+  const b = e.target.closest("button[data-tab]"); if (!b) return;
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x === b));
+  document.querySelectorAll("section").forEach(s => s.classList.toggle("active", s.id === b.dataset.tab));
+  store.set("tab", b.dataset.tab);
+};
+const startTab = store.get("tab", "control");
+document.querySelector(`nav button[data-tab="${startTab}"]`)?.click();
+
+// ---------- Config laden / speichern ----------
+function markDirty() { $("#dirty").style.display = JSON.stringify(cfg) !== savedJson ? "inline" : "none"; }
+function normalize(c) {
+  for (const k of ["server","obs","midi","dm3"]) c[k] = c[k] || {};
+  c.midi.ports = c.midi.ports || [];
+  c.tallies = c.tallies || [];
+  for (const t of c.tallies) {
+    t.obs = t.obs || {}; for (const k of ["sources","scenes","audio"]) t.obs[k] = t.obs[k] || [];
+    t.midi = Array.isArray(t.midi) ? t.midi : (t.midi ? [t.midi] : []);
+    for (const r of t.midi) r.mode = r.mode || (r.type === "note" ? "gate" : "level");
+  }
+  return c;
+}
+async function loadConfig() {
+  cfg = normalize(await api("GET", "/api/config"));
+  savedJson = JSON.stringify(cfg);
+  renderSources(); renderTallies(); markDirty();
+}
+$("#saveBtn").onclick = async () => {
+  try {
+    const res = await api("PUT", "/api/config", cfg);
+    cfg = normalize(res.config);
+    savedJson = JSON.stringify(cfg);
+    if (cfg.server.admin_password !== undefined) store.set("adminKey", cfg.server.admin_password || "");
+    renderSources(); renderTallies(); markDirty();
+    toast("Gespeichert – Quellen neu verbunden ✓");
+    setTimeout(loadDiscovery, 1500);
+  } catch (e) { toast("Fehler: " + e.message, true); }
+};
+$("#revertBtn").onclick = () => { cfg = JSON.parse(savedJson); renderSources(); renderTallies(); markDirty(); };
+window.addEventListener("beforeunload", e => { if (cfg && JSON.stringify(cfg) !== savedJson) { e.preventDefault(); e.returnValue = ""; } });
+
+// ---------- Quellen-Formular ----------
+function getPath(path) { return path.split(".").reduce((o,k) => (o||{})[k], cfg); }
+function setPath(path, v) { const ks = path.split("."); let o = cfg; ks.slice(0,-1).forEach(k => o = o[k] = o[k] || {}); o[ks.at(-1)] = v; }
+function renderSources() {
+  document.querySelectorAll("[data-bind]").forEach(el => {
+    const v = getPath(el.dataset.bind);
+    if (el.type === "checkbox") el.checked = !!v; else el.value = v ?? "";
+    el.oninput = el.onchange = () => {
+      setPath(el.dataset.bind, el.type === "checkbox" ? el.checked : el.type === "number" ? (el.value === "" ? null : Number(el.value)) : el.value);
+      markDirty();
+    };
+  });
+  chipEditor($("#midiPorts"), cfg.midi.ports = cfg.midi.ports || [], "dl-midi", "Port hinzufügen");
+}
+
+// Chip-Editor für Listen (OBS-Quellen, MIDI-Ports ...)
+function chipEditor(el, arr, listId, placeholder) {
+  el.innerHTML = arr.map((v,i) => `<span class="chip">${esc(v)}<button data-i="${i}" title="entfernen">×</button></span>`).join("") +
+    `<input list="${listId}" placeholder="${placeholder}" style="width:170px">`;
+  const inp = el.querySelector("input");
+  const add = () => { const v = inp.value.trim(); if (v && !arr.includes(v)) { arr.push(v); markDirty(); chipEditor(el, arr, listId, placeholder); el.querySelector("input").focus(); } else inp.value = ""; };
+  inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); add(); } };
+  inp.onchange = () => { if (document.querySelector(`#${listId} option[value="${CSS.escape(inp.value)}"]`)) add(); };
+  inp.onblur = () => { if (inp.value.trim()) add(); };
+  el.querySelectorAll("button[data-i]").forEach(b => b.onclick = () => { arr.splice(+b.dataset.i, 1); markDirty(); chipEditor(el, arr, listId, placeholder); });
+}
+
+// ---------- Tally-Editor ----------
+function newId() { let i = cfg.tallies.length + 1; while (cfg.tallies.some(t => t.id === "tally" + i)) i++; return "tally" + i; }
+$("#addTally").onclick = () => { cfg.tallies.push(normalize({ tallies:[{ id:newId(), name:"Neuer Tally" }] }).tallies[0]); renderTallies(); markDirty();
+  document.querySelector("#tallyList .tcard:last-child input")?.focus(); };
+
+function stateOf(id) { return status?.state?.tallies?.find(t => t.id === id)?.state || "idle"; }
+
+function renderTallies() {
+  const list = $("#tallyList");
+  list.innerHTML = "";
+  cfg.tallies.forEach((t, idx) => {
+    t.obs = t.obs || {}; t.midi = Array.isArray(t.midi) ? t.midi : (t.midi ? [t.midi] : []);
+    const d = t.dm3 || {};
+    const card = document.createElement("div");
+    card.className = "panel tcard " + stateOf(t.id); card.dataset.id = t.id;
+    card.innerHTML = `
+      <div class="hdr">
+        <label class="f">Name (am Handy) <input class="nm" value="${esc(t.name)}" style="width:200px"></label>
+        <label class="f">ID (für Link ?t=…) <input class="id" value="${esc(t.id)}" style="width:130px"></label>
+        <span class="small muted" style="flex:1">Handy-Link: <code>/?t=${esc(t.id)}</code></span>
+        <button class="btn up" title="nach oben">↑</button><button class="btn down" title="nach unten">↓</button>
+        <button class="btn danger del">Löschen</button>
+      </div>
+      <div class="grid3">
+        <div class="box"><h3>OBS</h3>
+          <div class="small muted">Quellen (sichtbar in Programm-Szene)</div><div class="chips obs-sources"></div>
+          <div class="small muted" style="margin-top:8px">Szenen (Szene selbst auf Programm)</div><div class="chips obs-scenes"></div>
+          <div class="small muted" style="margin-top:8px">Audio-Eingänge (nicht stumm = live)</div><div class="chips obs-audio"></div>
+        </div>
+        <div class="box"><h3>Yamaha DM3</h3>
+          <div class="row">
+            <label class="f">Kanal <input class="dm3-ch" type="number" min="1" max="64" value="${esc(d.channel ?? "")}" placeholder="–" style="width:70px"></label>
+            <label class="f">Typ <select class="dm3-kind"><option value="InCh">Mono (InCh)</option><option value="StInCh">Stereo (StInCh)</option></select></label>
+            <label class="f">min. dB <input class="dm3-db" type="number" step="1" value="${esc(d.min_db ?? -60)}" style="width:70px"></label>
+          </div>
+          <label class="small" style="display:block;margin-top:8px"><input type="checkbox" class="dm3-st" ${d.to_stereo ? "checked" : ""}> muss auf Stereo-Summe geroutet sein</label>
+          <div class="small muted" style="margin-top:6px">Live = Kanal ON und Fader über min. dB. Kanal leer = DM3 ignorieren.</div>
+        </div>
+        <div class="box"><h3>MIDI-Regeln <span class="muted small">(alle müssen erfüllt sein)</span></h3>
+          <table class="small"><thead><tr><th>Typ</th><th>Ch</th><th>Nr</th><th>Modus</th><th>%</th><th>inv</th><th></th></tr></thead><tbody class="rules"></tbody></table>
+          <button class="btn addrule" style="margin-top:6px">+ Regel</button>
+          <span class="small muted">oder im MIDI-Monitor anlernen</span>
+        </div>
+      </div>`;
+    list.appendChild(card);
+    const q = s => card.querySelector(s);
+    q(".nm").oninput = e => { t.name = e.target.value; markDirty(); };
+    q(".id").onchange = e => { t.id = e.target.value.trim().replace(/[\s\/?#&]+/g, "-"); e.target.value = t.id; markDirty(); renderMidiTargets(); };
+    q(".up").onclick = () => { if (idx > 0) { [cfg.tallies[idx-1], cfg.tallies[idx]] = [t, cfg.tallies[idx-1]]; renderTallies(); markDirty(); } };
+    q(".down").onclick = () => { if (idx < cfg.tallies.length-1) { [cfg.tallies[idx+1], cfg.tallies[idx]] = [t, cfg.tallies[idx+1]]; renderTallies(); markDirty(); } };
+    q(".del").onclick = () => { if (confirm(`Tally „${t.name}“ löschen?`)) { cfg.tallies.splice(idx,1); renderTallies(); markDirty(); } };
+    for (const [k, dl] of [["sources","dl-all"],["scenes","dl-scenes"],["audio","dl-inputs"]])
+      chipEditor(q(".obs-" + k), t.obs[k] = t.obs[k] || [], dl, "+ hinzufügen");
+    q(".dm3-kind").value = d.kind || "InCh";
+    const dm3upd = () => {
+      const ch = q(".dm3-ch").value;
+      if (ch === "") delete t.dm3;
+      else t.dm3 = { channel:Number(ch), kind:q(".dm3-kind").value, min_db:Number(q(".dm3-db").value || -60), to_stereo:q(".dm3-st").checked };
+      markDirty();
+    };
+    ["dm3-ch","dm3-kind","dm3-db","dm3-st"].forEach(c => q("." + c).onchange = q("." + c).oninput = dm3upd);
+    renderRules(q(".rules"), t);
+    q(".addrule").onclick = () => { t.midi.push({ type:"cc", channel:1, number:0, mode:"level", threshold:2 }); renderRules(q(".rules"), t); markDirty(); };
+  });
+  if (!cfg.tallies.length) list.innerHTML = `<div class="panel muted">Noch keine Tallys – „+ Tally“ klicken.</div>`;
+  renderMidiTargets();
+}
+
+function renderRules(tbody, t) {
+  tbody.innerHTML = t.midi.map((r,i) => `<tr data-i="${i}">
+    <td><select data-k="type"><option>cc</option><option>note</option><option>pitchbend</option></select></td>
+    <td><input data-k="channel" type="number" min="1" max="16" style="width:48px"></td>
+    <td><input data-k="number" type="number" min="0" max="127" style="width:54px"></td>
+    <td><select data-k="mode"><option value="level">level</option><option value="gate">gate</option><option value="toggle">toggle</option></select></td>
+    <td><input data-k="threshold" type="number" min="0" max="100" style="width:50px"></td>
+    <td><input data-k="invert" type="checkbox"></td>
+    <td><button class="btn danger" data-del>×</button></td></tr>`).join("") ||
+    `<tr><td colspan="7" class="muted">keine</td></tr>`;
+  tbody.querySelectorAll("tr[data-i]").forEach(tr => {
+    const r = t.midi[+tr.dataset.i];
+    r.mode = r.mode || (r.type === "note" ? "gate" : "level");
+    tr.querySelectorAll("[data-k]").forEach(el => {
+      const k = el.dataset.k;
+      if (el.type === "checkbox") el.checked = !!r[k]; else el.value = r[k] ?? (k === "threshold" ? 2 : "");
+      if (k === "number") el.disabled = r.type === "pitchbend";
+      el.onchange = () => {
+        r[k] = el.type === "checkbox" ? el.checked : el.type === "number" ? Number(el.value) : el.value;
+        if (k === "type") { if (r.type === "pitchbend") delete r.number; r.mode = r.type === "note" ? "gate" : "level"; renderRules(tbody, t); }
+        markDirty();
+      };
+    });
+    tr.querySelector("[data-del]").onclick = () => { t.midi.splice(+tr.dataset.i, 1); renderRules(tbody, t); markDirty(); };
+  });
+}
+
+// ---------- Discovery (OBS-Namen, MIDI-Ports) ----------
+async function loadDiscovery() {
+  try {
+    const d = await api("GET", "/api/discover");
+    const opts = a => (a || []).map(v => `<option value="${esc(v)}">`).join("");
+    $("#dl-inputs").innerHTML = opts(d.obs.inputs);
+    $("#dl-scenes").innerHTML = opts(d.obs.scenes);
+    $("#dl-all").innerHTML = opts([...(d.obs.inputs || []), ...(d.obs.scenes || [])]);
+    let dl = document.getElementById("dl-midi");
+    if (!dl) { dl = document.createElement("datalist"); dl.id = "dl-midi"; document.body.appendChild(dl); }
+    dl.innerHTML = opts(d.midi_ports);
+    $("#midiAvail").textContent = d.midi_error ? "MIDI nicht verfügbar (" + d.midi_error + ")" : (d.midi_ports.join(", ") || "keine Eingänge");
+  } catch (e) { console.warn(e); }
+}
+$("#refreshDisc").onclick = () => loadDiscovery().then(() => toast("Namen aktualisiert"));
+
+// ---------- Live-Status ----------
+async function poll() {
+  try {
+    status = await api("GET", "/api/status?midi_since=" + midiSince);
+    renderControl();
+    if (status.midi_log.length) {
+      midiSince = status.midi_log.at(-1).seq;
+      midiRows = [...status.midi_log.reverse(), ...midiRows].slice(0, 200);
+      renderMidiLog();
+    }
+    document.querySelectorAll("#tallyList .tcard").forEach(c => c.className = "panel tcard " + stateOf(c.dataset.id));
+  } catch (e) { $("#srcStatus").innerHTML = `<span class="dot bad"></span>Server nicht erreichbar: ${esc(e.message)}`; }
+}
+
+function renderControl() {
+  const st = status.state, ov = status.overrides || {};
+  $("#tiles").innerHTML = st.tallies.map(t => `
+    <div class="tile ${t.state}">
+      <div class="nm">${esc(t.name)}</div>
+      <div class="by">${esc([...t.program_by, ...(t.state === "preview" ? t.preview_by : [])].join(" · ") || (t.state === "idle" ? "aus" : ""))}</div>
+      <div class="btns">
+        <button class="btn ${ov[t.id] === "program" ? "on-prog" : ""}" data-ov="program" data-id="${esc(t.id)}">LIVE</button>
+        <button class="btn ${ov[t.id] === "preview" ? "on-prev" : ""}" data-ov="preview" data-id="${esc(t.id)}">PREVIEW</button>
+        <button class="btn" data-ov="" data-id="${esc(t.id)}" ${ov[t.id] ? "" : "disabled"}>Auto</button>
+      </div>
+    </div>`).join("") || `<span class="muted">keine Tallys</span>`;
+  const srcs = Object.entries(st.sources || {});
+  $("#srcStatus").innerHTML = srcs.length ? srcs.map(([n,s]) =>
+    `<div class="src"><span class="dot ${s.connected ? "ok" : "bad"}"></span><b>${esc(n)}</b><span class="muted small">${esc(s.info)}</span></div>`).join("")
+    : `<span class="muted">Keine Quelle aktiv – unter „Quellen“ aktivieren.</span>`;
+  const g = st.globals || {};
+  $("#air").innerHTML = (g.streaming ? `<span class="air">ON AIR</span> ` : "") + (g.recording ? `<span class="air">REC</span>` : "");
+  $("#demoChk").checked = status.demo;
+  // Handys
+  const tOpts = sel => `<option value="">–</option>` + st.tallies.map(t => `<option value="${esc(t.id)}" ${t.id === sel ? "selected" : ""}>${esc(t.name)}</option>`).join("")
+                       + `<option value="*" ${sel === "*" ? "selected" : ""}>Übersicht</option>`;
+  $("#clientCount").textContent = `(${status.clients.length})`;
+  const tb = $("#clients");
+  if (document.activeElement?.closest("#clients")) return; // nicht während Auswahl neu zeichnen
+  tb.innerHTML = status.clients.map(c => `<tr>
+      <td>${c.id}</td><td>${esc(c.ip)}</td>
+      <td><select data-assign="${c.id}">${tOpts(c.tally)}</select></td>
+      <td class="small muted">${esc(shortAgent(c.agent))}</td>
+      <td><button class="btn" data-cmd="identify" data-client="${c.id}">Identifizieren</button></td></tr>`).join("")
+    || `<tr><td colspan="5" class="muted">Noch kein Handy verbunden. Handy im WLAN auf die Startseite (ohne /admin) schicken.</td></tr>`;
+}
+function shortAgent(a) {
+  if (!a) return "";
+  const m = a.match(/iPhone|iPad|Android [\d.]+|Windows|Macintosh|Linux/); const b = a.match(/(Chrome|Firefox|Safari|Edg)\/[\d]+/);
+  return [m && m[0], b && b[0]].filter(Boolean).join(" · ") || a.slice(0, 40);
+}
+
+document.addEventListener("click", async e => {
+  const ovb = e.target.closest("button[data-ov]");
+  if (ovb) { await api("POST", "/api/override", { id:ovb.dataset.id, state:ovb.dataset.ov || null }); poll(); return; }
+  const cmd = e.target.closest("button[data-cmd]");
+  if (cmd) { const r = await api("POST", "/api/client", { action:cmd.dataset.cmd, client:cmd.dataset.client ?? "all" });
+             toast(`an ${r.sent} Handy(s) gesendet`); }
+});
+document.addEventListener("change", async e => {
+  const sel = e.target.closest("select[data-assign]");
+  if (sel && sel.value) { await api("POST", "/api/client", { action:"assign", client:sel.dataset.assign, tally:sel.value });
+                          sel.blur(); toast("Tally zugewiesen"); setTimeout(poll, 300); }
+});
+$("#allOff").onclick = async () => { await api("POST", "/api/override", { all_off:true }); poll(); };
+$("#demoChk").onchange = async e => { await api("POST", "/api/demo", { on:e.target.checked }); poll(); };
+
+// ---------- MIDI-Monitor ----------
+function renderMidiTargets() {
+  const sel = $("#midiTarget"), cur = sel.value;
+  sel.innerHTML = `<option value="">Ziel-Tally wählen…</option>` + cfg.tallies.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("");
+  sel.value = cur;
+}
+function renderMidiLog() {
+  $("#midiLog").innerHTML = midiRows.map((m,i) => `<tr>
+      <td class="muted">${new Date(m.time*1000).toLocaleTimeString()}</td><td class="muted">${esc(m.port)}</td>
+      <td>${esc(m.text)}</td><td><button class="btn" data-learn="${i}">→ Tally</button></td></tr>`).join("")
+    || `<tr><td colspan="4" class="muted">noch keine Nachrichten</td></tr>`;
+}
+$("#midiLog").onclick = e => {
+  const b = e.target.closest("button[data-learn]"); if (!b) return;
+  const tid = $("#midiTarget").value;
+  const t = cfg.tallies.find(x => x.id === tid);
+  if (!t) { toast("Erst oben einen Ziel-Tally wählen", true); return; }
+  const rule = { ...midiRows[+b.dataset.learn].rule };
+  t.midi = Array.isArray(t.midi) ? t.midi : [];
+  if (t.midi.some(r => r.type === rule.type && r.channel === rule.channel && r.number === rule.number)) { toast("Regel existiert schon"); return; }
+  t.midi.push(rule); renderTallies(); markDirty();
+  toast(`Regel zu „${t.name}“ hinzugefügt – Speichern nicht vergessen`);
+};
+$("#clearLog").onclick = () => { midiRows = []; renderMidiLog(); };
+
+// ---------- Start ----------
+(async () => {
+  try { await loadConfig(); } catch (e) { toast("Config konnte nicht geladen werden: " + e.message, true); return; }
+  await poll(); loadDiscovery();
+  setInterval(poll, 800);
+})();
+</script>
+</body>
+</html>

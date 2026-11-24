@@ -17,6 +17,9 @@
   #tally.program { background:var(--prog); }
   #tally.preview { background:var(--prev); }
   #tally.offline { background:#000; outline:8px dashed #555; outline-offset:-16px; }
+  #ident { position:fixed; inset:0; z-index:9; display:none; align-items:center; justify-content:center;
+    font-size:min(14vw,12vh); font-weight:800; color:#000; background:#fff; animation:blink .25s steps(2) infinite; }
+  @keyframes blink { 50% { background:#2060ff; color:#fff; } }
   #name { font-size:min(16vw,15vh); font-weight:800; text-align:center; padding:0 4vw; line-height:1.05; }
   #label { font-size:min(8vw,7vh); font-weight:700; letter-spacing:.15em; margin-top:2vh; opacity:.9; }
   #by { font-size:3.5vw; margin-top:1.5vh; opacity:.6; }
@@ -45,6 +48,7 @@
 <body>
 <div id="tally" class="offline"><div id="name">…</div><div id="label">VERBINDE</div><div id="by"></div></div>
 <div id="grid"></div>
+<div id="ident"></div>
 <div id="top"><span id="air"></span><span id="srcs"></span><button id="menuBtn" aria-label="Menü">☰</button></div>
 <div id="picker">
   <h1>Welcher Tally bin ich?</h1>
@@ -108,10 +112,21 @@ function openPicker() {
 }
 $("#picker").addEventListener("click", e => {
   const b = e.target.closest("button.t"); if (!b) return;
-  mine = b.dataset.id; store.set("tally", mine);
-  history.replaceState(null, "", "?t=" + encodeURIComponent(mine));
-  $("#picker").style.display = "none"; lastState = null; render(); goFullscreen();
+  choose(b.dataset.id); goFullscreen();
 });
+function choose(id) {
+  mine = id; store.set("tally", mine);
+  history.replaceState(null, "", "?t=" + encodeURIComponent(mine));
+  $("#picker").style.display = "none"; lastState = null; hello(); render();
+}
+let clientId = null;
+function hello() { if (ws && ws.readyState === 1)
+  ws.send(JSON.stringify({ type:"hello", tally:mine, agent:navigator.userAgent })); }
+function identify() {
+  const el = $("#ident"); el.textContent = "Handy #" + clientId; el.style.display = "flex";
+  if (navigator.vibrate) navigator.vibrate([100,50,100,50,100]);
+  clearTimeout(identify.t); identify.t = setTimeout(() => el.style.display = "none", 4000);
+}
 $("#menuBtn").onclick = e => { e.stopPropagation(); openPicker(); };
 $("#fsBtn").onclick = goFullscreen;
 $("#vibBtn").onclick = () => { vibrate = !vibrate; store.set("vib", vibrate?"1":"0"); updOpts(); };
@@ -138,8 +153,12 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 function connect() {
   ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
   ws.onmessage = e => { alive = Date.now(); const m = JSON.parse(e.data);
-    if (m.type === "state") { last = m; if (!mine) openPicker(); render(); } };
-  ws.onopen = () => { alive = Date.now(); render(); };
+    if (m.type === "state") { last = m; if (!mine) openPicker(); render(); }
+    else if (m.type === "welcome") { clientId = m.client; }
+    else if (m.type === "identify") identify();
+    else if (m.type === "assign" && m.tally) choose(m.tally);
+    else if (m.type === "reload") location.reload(); };
+  ws.onopen = () => { alive = Date.now(); hello(); render(); };
   ws.onclose = () => { render(); setTimeout(connect, 1000); };
   ws.onerror = () => ws.close();
 }

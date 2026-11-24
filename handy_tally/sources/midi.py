@@ -29,6 +29,8 @@ Mit `python tally.py --midi-monitor` siehst du alle eingehenden Nachrichten.
 from __future__ import annotations
 
 import asyncio
+import collections
+import time
 
 from engine import TallyEngine
 
@@ -50,12 +52,26 @@ class MidiSource:
         self.toggles: dict[tuple, bool] = {}
         self.open_ports: dict[str, object] = {}
         self.loop: asyncio.AbstractEventLoop | None = None
+        # letzte Nachrichten für den MIDI-Monitor im Admin-Client
+        self.log: collections.deque = collections.deque(maxlen=60)
+        self.log_seq = 0
 
     def _wanted(self, name: str) -> bool:
         return not self.port_filters or any(f.lower() in name.lower() for f in self.port_filters)
 
     async def run(self) -> None:
         self.loop = asyncio.get_running_loop()
+        try:
+            await self._run()
+        finally:
+            for port in self.open_ports.values():
+                try:
+                    port.close()
+                except Exception:
+                    pass
+            self.open_ports.clear()
+
+    async def _run(self) -> None:
         while True:
             try:
                 available = self.mido.get_input_names()
@@ -96,6 +112,17 @@ class MidiSource:
         elif t == "note_on":
             t, vel = "note", msg.velocity
         ch = getattr(msg, "channel", 0) + 1
+        rule = None
+        if t == "note":
+            rule = {"type": "note", "channel": ch, "number": msg.note, "mode": "gate"}
+        elif t == "control_change":
+            rule = {"type": "cc", "channel": ch, "number": msg.control, "threshold": 2}
+        elif t == "pitchwheel":
+            rule = {"type": "pitchbend", "channel": ch, "threshold": 2}
+        if rule:
+            self.log_seq += 1
+            self.log.append({"seq": self.log_seq, "time": time.time(), "port": port,
+                             "text": str(msg).replace(" time=0", ""), "rule": rule})
         if t == "note":
             k = _key("note", ch, msg.note, port)
             if vel > 0:
